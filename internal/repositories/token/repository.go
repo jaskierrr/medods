@@ -1,5 +1,6 @@
-//go:generate mockgen -source=./repository.go -destination=../../mocks/repo_mock.go -package=mock
-package repo
+//go:generate mockgen -source=./repository.go -destination=../../../test/mock/repo_token_mock.go -package=mock
+
+package repoToken
 
 import (
 	"context"
@@ -16,16 +17,16 @@ type repository struct {
 	logger *slog.Logger
 }
 
-type Repository interface {
+type RepositoryToken interface {
 	Login(ctx context.Context, user models.User, refreshToken string, refreshTokenDuration time.Time) error
-	SelectToken(ctx context.Context, req models.RefreshRequest) (models.RefreshToken, error)
-	DeleteToken(ctx context.Context, tx pgx.Tx, req models.RefreshRequest) error
+	SelectToken(ctx context.Context, userID string, token string) (*models.RefreshToken, error)
+	DeleteToken(ctx context.Context, tx pgx.Tx, userID string, token string) error
 	InsertNewToken(ctx context.Context, user models.User, tx pgx.Tx, refreshToken string, refreshTokenDuration time.Time) error
 
 	StartTx(ctx context.Context) (pgx.Tx, error)
 }
 
-func NewUserRepo(db database.DB, logger *slog.Logger) Repository {
+func NewUserRepo(db database.DB, logger *slog.Logger) RepositoryToken {
 	return &repository{
 		db:     db,
 		logger: logger,

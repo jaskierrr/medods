@@ -2,6 +2,8 @@ package bootstrapper
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log"
 	"log/slog"
 	"main/config"
@@ -9,12 +11,11 @@ import (
 	"main/internal/database"
 	"main/internal/handlers"
 	logger "main/internal/lib/logger"
-	repo "main/internal/repositories"
-	"main/internal/service"
+	repoEmail "main/internal/repositories/email_mock"
+	repoToken "main/internal/repositories/token"
+	service "main/internal/service/token"
 	"net/http"
 )
-
-var Secret string = ""
 
 type RootBootstrapper struct {
 	Infrastructure struct {
@@ -25,12 +26,13 @@ type RootBootstrapper struct {
 	Controller controller.Controller
 	Config     *config.Config
 	Handlers   handlers.Handlers
-	Repository repo.Repository
+	RepoToken  repoToken.RepositoryToken
+	RepoEmail  repoEmail.RepositoryEmail
 	Service    service.Service
 }
 
 type RootBoot interface {
-	registerRepositoriesAndServices(ctx context.Context, db database.DB)
+	registerRepositoriesAndServices(ctx context.Context) error
 	registerAPIServer(cfg config.Config) error
 	RunAPI() error
 }
@@ -42,11 +44,10 @@ func New() RootBoot {
 }
 
 func (r *RootBootstrapper) RunAPI() error {
-	Secret = r.Config.Secret
 	ctx := context.Background()
 	r.Infrastructure.Logger = logger.NewLogger()
 
-	r.registerRepositoriesAndServices(ctx, r.Infrastructure.DB)
+	r.registerRepositoriesAndServices(ctx)
 	err := r.registerAPIServer(*r.Config)
 	if err != nil {
 		return err
@@ -55,28 +56,41 @@ func (r *RootBootstrapper) RunAPI() error {
 	return nil
 }
 
-func (r *RootBootstrapper) registerRepositoriesAndServices(ctx context.Context, db database.DB) {
-	logger := r.Infrastructure.Logger
-	r.Infrastructure.DB = database.NewDB().NewConn(ctx, *r.Config, logger)
-	r.Repository = repo.NewUserRepo(r.Infrastructure.DB, logger)
-	r.Service = service.New(r.Repository, logger, r.Config.Secret, r.Config.AccessTokenTTL, r.Config.RefreshTokenTTL)
+func (r *RootBootstrapper) registerRepositoriesAndServices(ctx context.Context) error {
+	db, err := database.NewDB().NewConn(ctx, *r.Config, r.Infrastructure.Logger)
+	if err != nil {
+		return err
+	}
+	r.Infrastructure.DB = db
+
+	r.RepoToken = repoToken.NewUserRepo(r.Infrastructure.DB, r.Infrastructure.Logger)
+	r.RepoEmail = repoEmail.NewEmailRepo(r.Infrastructure.Logger)
+	r.Service = service.New(
+		r.RepoToken,
+		r.RepoEmail,
+		r.Infrastructure.Logger,
+		r.Config.Secret,
+		r.Config.AccessTokenTTL,
+		r.Config.RefreshTokenTTL,
+	)
+
+	return nil
 }
 
 func (r *RootBootstrapper) registerAPIServer(cfg config.Config) error {
-	logger := r.Infrastructure.Logger
+	r.Controller = controller.New(r.Service, r.Infrastructure.Logger)
 
-	r.Controller = controller.New(r.Service, logger)
-
-	r.Handlers = handlers.New(r.Controller, logger)
+	r.Handlers = handlers.New(r.Controller, r.Infrastructure.Logger)
 	mux := http.NewServeMux()
 	r.Handlers.Link(mux)
 	if r.Handlers == nil {
-		log.Fatal("handlers initialization failed")
+		return errors.New("handlers initialization failed")
 	}
 
 	log.Printf("Serving server at http://127.0.0.1:%v", cfg.ServerPort)
 
-	if err := http.ListenAndServe(":"+cfg.ServerPort, mux); err != nil {
+	addr := fmt.Sprintf(":%v", cfg.ServerPort)
+	if err := http.ListenAndServe(addr, mux); err != nil {
 		return err
 	}
 

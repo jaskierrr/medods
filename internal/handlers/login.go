@@ -17,7 +17,7 @@ func (h *handlers) Login(w http.ResponseWriter, r *http.Request) {
 	user := models.User{
 		ID: r.URL.Query().Get("id"),
 		// насколько правильно это тут реализовывать, может в сервис перенести
-		IP: readUserIP(h, r),
+		IP: h.readUserIP(r),
 	}
 
 	if user.ID == "" {
@@ -37,7 +37,14 @@ func (h *handlers) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(responseData)
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(responseData); err != nil {
+		h.logger.Error("Failed to write response",
+			slog.Any("Error", err),
+		)
+		if w.Header().Get("Content-Type") == "" {
+			http.Error(w, "Failed to write response", http.StatusInternalServerError)
+		}
+	}
 }

@@ -30,7 +30,7 @@ func NewConfig() *Config {
 		log.Println("No .env file found")
 	}
 
-	cfg := &Config{}
+	cfg := new(Config)
 	if err := envconfig.Process("", cfg); err != nil {
 		log.Fatal("Failed load envconfig " + err.Error())
 	}

@@ -3,7 +3,6 @@ package database
 import (
 	"context"
 	"fmt"
-	"log"
 	"log/slog"
 	"main/config"
 
@@ -18,25 +17,31 @@ type db struct {
 }
 
 type DB interface {
-	NewConn(ctx context.Context, config config.Config, logger *slog.Logger) DB
+	NewConn(ctx context.Context, config config.Config, logger *slog.Logger) (DB, error)
 	GetConn() *pgx.Conn
 }
 
 func NewDB() DB {
-	return &db{}
+	return new(db)
 }
 
-func (d *db) NewConn(ctx context.Context, config config.Config, logger *slog.Logger) DB {
-	connString := fmt.Sprintf(dbConfigString, config.Database.User, config.Database.Password, config.Database.Host, config.Database.Port, config.Database.Name)
+func (d *db) NewConn(ctx context.Context, config config.Config, logger *slog.Logger) (DB, error) {
+	connString := fmt.Sprintf(dbConfigString,
+		config.Database.User,
+		config.Database.Password,
+		config.Database.Host,
+		config.Database.Port,
+		config.Database.Name,
+	)
 
 	conn, err := pgx.Connect(ctx, connString)
 	if err != nil {
-		log.Fatalf("Unable to connect to database: %v\n", err)
+		return nil, err
 	}
 
 	err = conn.Ping(ctx)
 	if err != nil {
-		log.Fatalf("Failed to ping the database: %v\n", err)
+		return nil, err
 	}
 
 	logger.Debug("New Postgres connection opened")
@@ -44,9 +49,9 @@ func (d *db) NewConn(ctx context.Context, config config.Config, logger *slog.Log
 	return &db{
 		logger: logger,
 		conn:   conn,
-	}
+	}, nil
 }
 
-func (db *db) GetConn() *pgx.Conn {
-	return db.conn
+func (d *db) GetConn() *pgx.Conn {
+	return d.conn
 }

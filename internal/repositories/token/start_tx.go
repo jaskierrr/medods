@@ -1,7 +1,8 @@
-package repo
+package repoToken
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -16,6 +17,7 @@ func (r *repository) StartTx(ctx context.Context) (pgx.Tx, error) {
 			})
 
 	if err != nil {
+		r.logger.Error(fmt.Sprintf("repo_token.StartTx(): %v", err))
 		return nil, err
 	}
 

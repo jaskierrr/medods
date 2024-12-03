@@ -30,17 +30,19 @@ func (h *handlers) Link(mux *http.ServeMux) {
 	mux.HandleFunc("/refresh", h.Refresh)
 }
 
+var headers = []string{
+	"X-Real-Ip",
+	"X-Forwarded-For",
+}
+
 // насколько правильно это тут реализовывать, может в сервис перенести
-func readUserIP(h *handlers, r *http.Request) string {
-	IPAddress := r.Header.Get("X-Real-Ip")
-	if IPAddress == "" {
-		IPAddress = r.Header.Get("X-Forwarded-For")
+func (h *handlers) readUserIP(r *http.Request) string {
+	for i := range headers {
+		h := r.Header.Get(headers[i])
+		if h != "" {
+			return h
+		}
 	}
-	if IPAddress == "" {
-		IPAddress = r.RemoteAddr
-		h.logger.Debug("ip addr from r.RemoteAddr, but not from headers",
-			slog.Any("ip", IPAddress),
-		)
-	}
-	return IPAddress
+
+	return r.RemoteAddr
 }

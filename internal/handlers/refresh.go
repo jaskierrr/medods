@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"log/slog"
 	"main/internal/models"
@@ -14,32 +13,34 @@ func (h *handlers) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req := models.RefreshRequest{}
+	var req models.RefreshRequest
 
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		h.logger.Error("Error",
-			slog.Any("Error", err),
-		)
+		h.logger.Error("Error", slog.Any("Error", err))
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
 	defer r.Body.Close()
 
-	req.User.IP = readUserIP(h, r)
+	req.User.IP = h.readUserIP(r)
 
-	ctx := context.Background()
-
-	responseData, err := h.controller.Refresh(ctx, req)
+	responseData, err := h.controller.Refresh(r.Context(), req)
 	if err != nil {
-		h.logger.Error("Error refresh token",
-			slog.Any("Error", err),
-		)
+		h.logger.Error(err.Error())
 		http.Error(w, "Internal error", http.StatusInternalServerError)
+
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(responseData)
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(responseData); err != nil {
+		h.logger.Error("Failed to write response",
+			slog.Any("Error", err),
+		)
+		if w.Header().Get("Content-Type") == "" {
+			http.Error(w, "Failed to write response", http.StatusInternalServerError)
+		}
+	}
 }
